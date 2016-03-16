@@ -124,7 +124,13 @@
               }
             },
             "commands" : {
-              "startECSAgent" : {
+              "01_startDocker" : {
+                "command" : "/sbin/service docker start"
+              },
+              "02_pauseForDockerToStart" : {
+                "command" : "until [[ $(/sbin/service docker status) =~ running ]]; do sleep 1; done"
+              },
+              "03_startECSAgent" : {
                 "command" : "start ecs"
               }
             }
