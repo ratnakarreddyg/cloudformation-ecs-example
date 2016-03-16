@@ -50,10 +50,6 @@
   
   "Resources" : {
     
-    "ECRRepository" : {
-      "Type" : "AWS::ECR::Repository"
-    },
-    
     "EC2IAMRole" : {
       "Type": "AWS::IAM::Role",
       "Properties" : {
@@ -112,12 +108,17 @@
           "config" : {
             "packages" : {
               "yum" : {
-                "ecs-init" : []
+                "ecs-init" : [],
+                "haproxy" : []
               }
             },
             "services" : {
               "sysvinit" : {
                 "docker" : {
+                  "enabled" : "true",
+                  "ensureRunning" : "true"
+                },
+                "haproxy" : {
                   "enabled" : "true",
                   "ensureRunning" : "true"
                 }
