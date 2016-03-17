@@ -167,13 +167,16 @@
               }
             },
             "commands" : {
-              "01_startDocker" : {
+              "01_installPythonDeps" : {
+                "command" : "pip install docker-py "
+              },
+              "02_startDocker" : {
                 "command" : "/sbin/service docker start"
               },
-              "02_pauseForDockerToStart" : {
+              "03_pauseForDockerToStart" : {
                 "command" : "until [[ $(/sbin/service docker status) =~ running ]]; do sleep 1; done"
               },
-              "03_startECSAgent" : {
+              "04_startECSAgent" : {
                 "command" : "start ecs"
               }
             }
