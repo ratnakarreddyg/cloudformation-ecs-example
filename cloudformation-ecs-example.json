@@ -220,11 +220,44 @@
         "VPCZoneIdentifier" : { "Ref" : "VPCSubnets" },
         "MinSize" : "1",
         "MaxSize" : "10",
+        "LoadBalancerNames" : [ { "Ref" : "Elb8000" } ],
         "Tags" : [
           { "Key" : "Name", "Value" : { "Ref" : "AWS::StackName" }, "PropagateAtLaunch" : "true" }
         ]
       }
+    },
+    
+    "Elb8000" : {
+      "Type" : "AWS::ElasticLoadBalancing::LoadBalancer",
+      "Properties" : {
+        "Listeners": [
+          {
+            "LoadBalancerPort" : "80",
+            "InstancePort": "8000",
+            "Protocol": "TCP"
+          }
+        ],
+        
+        "Subnets": { "Ref" : "VPCSubnets" },
+        
+        "HealthCheck": {
+          "Target": "HTTP:8000/",
+          "HealthyThreshold": "3",
+          "Interval": "5",
+          "Timeout": "3",
+          "UnhealthyThreshold": "2"
+        },
+        
+        "ConnectionDrainingPolicy": {
+          "Enabled" : "true",
+          "Timeout" : "60"
+        },
+        
+        "CrossZone": "true"
+      }
     }
+    
+    
     
     
   }
