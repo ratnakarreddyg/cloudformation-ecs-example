@@ -6,6 +6,11 @@
     "ClusterName" : {
       "Description" : "ECS Cluster Name",
       "Type" : "String"
+    },
+    "CPUHighThreshold" : {
+      "Description" : "Hich CPU Treshold in %",
+      "Type" : "String",
+      "Default" : "80"
     }
   },
   
@@ -50,6 +55,100 @@
         "Cluster" : {"Ref" : "ClusterName" },
         "DesiredCount" : "1",
         "TaskDefinition" : {"Ref" : "httpdTask"}
+      }
+    },
+    
+    "httpdServiceCpuAlarm" : {
+      "Type" : "AWS::CloudWatch::Alarm",
+      "Properties" : {
+        "Namespace" : "AWS/ECS",
+        "MetricName" : "CPUUtilization",
+        "Dimensions" : [
+          {
+            "Name" : "ClusterName",
+            "Value" : { "Ref" : "ClusterName" }
+          },
+          {
+            "Name" : "ServiceName",
+            "Value" : { "Ref" : "getECSServiceNameFromArnCustom" }
+            
+          }
+        ],
+        "Statistic" : "Average",
+        "Period" : "60",
+        "EvaluationPeriods" : "3",
+        "Threshold" : { "Ref" : "CPUHighThreshold" },
+        "ComparisonOperator": "GreaterThanThreshold"
+      }
+    },
+    
+    "getECSServiceNameFromArnFunctionRole" : {
+      "Type": "AWS::IAM::Role",
+        "Properties": {
+          "AssumeRolePolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Effect": "Allow",
+              "Principal": {"Service": ["lambda.amazonaws.com"]},
+              "Action": ["sts:AssumeRole"]
+            }]
+          },
+          "Path": "/",
+          "Policies": [{
+            "PolicyName": "root",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [{
+                "Effect": "Allow",
+                "Action": ["logs:CreateLogGroup","logs:CreateLogStream","logs:PutLogEvents"],
+                "Resource": "arn:aws:logs:*:*:*"
+              }]
+            }
+          }]
+        }
+    },
+    
+    "getECSServiceNameFromArnFunction" : {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "ZipFile":  { "Fn::Join": ["\n", [
+            "var response = require('cfn-response');\n",
+            "var aws = require('aws-sdk');\n",
+            "var lambda = new aws.Lambda();\n",
+            "exports.handler = function(event, context) {\n",
+            "    if (event.RequestType == 'Delete') {\n",
+            "        response.send(event, context, response.SUCCESS);\n",
+            "        return;\n",
+            "    }\n",
+            "    var stringToParse = event.ResourceProperties.StringToParse;\n",
+            "    if (stringToParse) {\n",
+            "        var responseData = {};\n",
+            "        responseData.Splits = stringToParse.split('/');\n",
+            "        responseData.Beginning = responseData.Splits.slice(0, responseData.Splits.length - 1).join('/');\n",
+            "        responseData.Last = responseData.Splits.slice(responseData.Splits.length - 1)[0];\n",
+            "        console.log(responseData);\n",
+            "        response.send(event, context, response.SUCCESS, responseData);\n",
+            "    } else {\n",
+            "        var responseData = {Error: 'String no specified'};\n",
+            "        console.log(responseData.Error);\n",
+            "        response.send(event, context, response.FAILED, responseData);\n",
+            "    };\n",
+            "};\n"
+          ]]}
+        },
+        "Handler": "index.handler",
+        "Runtime": "nodejs",
+        "Timeout": "30",
+        "Role": { "Fn::GetAtt" : ["getECSServiceNameFromArnFunctionRole", "Arn"] }
+      }
+    },
+    
+    "getECSServiceNameFromArnCustom" : {
+      "Type": "Custom::NetworkInfo",
+      "Properties" : {
+        "ServiceToken": { "Fn::GetAtt" : ["getECSServiceNameFromArnFunction", "Arn"] },
+        "StringToParse": { "Ref" : "httpdService" }
       }
     }
     
