@@ -1,0 +1,58 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+  "Description" : "httpd ECS service",
+  
+  "Parameters" : {
+    "ClusterName" : {
+      "Description" : "ECS Cluster Name",
+      "Type" : "String"
+    }
+  },
+  
+  "Resources" : {
+    
+    "httpdTask" : {
+      "Type": "AWS::ECS::TaskDefinition",
+      "Properties" : {
+        "ContainerDefinitions" : [
+          {
+            "Name" : { "Fn::Join" : ["", [
+              { "Ref" : "AWS::StackName" }, "-httpdTask"
+            ]]},
+            
+            "Image":"httpd:latest",
+            "Cpu": "10",
+            "Memory": "128",
+            "PortMappings": [
+              {
+                "ContainerPort": "80"
+              }
+            ],
+            "Environment" : [
+              {
+                "Name": "docker-proxy-container-port",
+                "Value": "80"
+              },
+              {
+                "Name": "docker-proxy-external-port",
+                "Value": "8000"
+              }
+            ],
+            "Essential": "true"
+          }
+        ]
+      }
+    },
+    
+    "httpdService" : {
+      "Type" : "AWS::ECS::Service",
+      "Properties" : {
+        "Cluster" : {"Ref" : "ClusterName" },
+        "DesiredCount" : "1",
+        "TaskDefinition" : {"Ref" : "httpdTask"}
+      }
+    }
+    
+  }
+  
+}

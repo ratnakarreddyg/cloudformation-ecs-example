@@ -173,7 +173,8 @@
               },
               "/etc/ecs/ecs.config" : {
                 "content" : { "Fn::Join" : ["", [
-                  "ECS_CLUSTER=", { "Ref": "ECSCluster" }
+                  "ECS_CLUSTER=", { "Ref": "ECSCluster" }, "\n",
+                  "ECS_RESERVED_MEMORY=256"
                 ]]}
               }
             },
