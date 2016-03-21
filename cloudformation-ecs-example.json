@@ -74,11 +74,17 @@
               {
                 "Effect":"Allow",
                 "Action":[
-                  "ecs:RegisterContainerInstance",
+                  "ecs:CreateCluster",
                   "ecs:DeregisterContainerInstance",
                   "ecs:DiscoverPollEndpoint",
+                  "ecs:Poll",
+                  "ecs:RegisterContainerInstance",
+                  "ecs:StartTelemetrySession",
                   "ecs:Submit*",
-                  "ecs:Poll"
+                  "ecr:GetAuthorizationToken",
+                  "ecr:BatchCheckLayerAvailability",
+                  "ecr:GetDownloadUrlForLayer",
+                  "ecr:BatchGetImage"
                 ],
                 "Resource":"*"
               },
@@ -164,6 +170,11 @@
                 "mode"  : "000644",
                 "owner" : "root",
                 "group" : "root"
+              },
+              "/etc/ecs/ecs.config" : {
+                "content" : { "Fn::Join" : ["", [
+                  "ECS_CLUSTER=", { "Ref": "ECSCluster" }
+                ]]}
               }
             },
             "commands" : {
@@ -255,10 +266,11 @@
         
         "CrossZone": "true"
       }
+    },
+    
+    "ECSCluster" : {
+      "Type" : "AWS::ECS::Cluster"
     }
-    
-    
-    
     
   }
   
