@@ -70,7 +70,7 @@
           },
           {
             "Name" : "ServiceName",
-            "Value" : { "Ref" : "getECSServiceNameFromArnCustom" }
+            "Value" : { "Fn::GetAtt" : ["getECSServiceNameFromArnCustom", "Last"] }
             
           }
         ],
@@ -145,7 +145,7 @@
     },
     
     "getECSServiceNameFromArnCustom" : {
-      "Type": "Custom::NetworkInfo",
+      "Type": "Custom::ECSServiceNameFromArn",
       "Properties" : {
         "ServiceToken": { "Fn::GetAtt" : ["getECSServiceNameFromArnFunction", "Arn"] },
         "StringToParse": { "Ref" : "httpdService" }
