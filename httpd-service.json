@@ -78,8 +78,15 @@
         "Period" : "60",
         "EvaluationPeriods" : "3",
         "Threshold" : { "Ref" : "CPUHighThreshold" },
-        "ComparisonOperator": "GreaterThanThreshold"
+        "ComparisonOperator": "GreaterThanThreshold",
+        "AlarmActions" : [
+          { "Ref" : "httpdServiceAlarmNotificationTopic" }
+        ]
       }
+    },
+    
+    "httpdServiceAlarmNotificationTopic" : {
+      "Type" : "AWS::SNS::Topic"
     },
     
     "getECSServiceNameFromArnFunctionRole" : {
