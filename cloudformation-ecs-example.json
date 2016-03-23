@@ -80,6 +80,8 @@
                   "ecs:Poll",
                   "ecs:RegisterContainerInstance",
                   "ecs:StartTelemetrySession",
+                  "ecs:DescribeServices",
+                  "ecs:UpdateService",
                   "ecs:Submit*",
                   "ecr:GetAuthorizationToken",
                   "ecr:BatchCheckLayerAvailability",
