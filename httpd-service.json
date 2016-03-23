@@ -11,12 +11,22 @@
       "Description" : "Hich CPU Treshold in %",
       "Type" : "String",
       "Default" : "80"
+    },
+    "MaxTasks" : {
+      "Description" : "Maximum number of ECS Tasks for the service",
+      "Type" : "String",
+      "Default" : "20"
+    },
+    "MinTasks" : {
+      "Description" : "Minimum number of ECS Tasks for the service",
+      "Type" : "String",
+      "Default" : "2"
     }
   },
   
   "Resources" : {
     
-    "httpdTask" : {
+    "ecsTask" : {
       "Type": "AWS::ECS::TaskDefinition",
       "Properties" : {
         "ContainerDefinitions" : [
@@ -49,16 +59,16 @@
       }
     },
     
-    "httpdService" : {
+    "ecsService" : {
       "Type" : "AWS::ECS::Service",
       "Properties" : {
         "Cluster" : {"Ref" : "ClusterName" },
         "DesiredCount" : "1",
-        "TaskDefinition" : {"Ref" : "httpdTask"}
+        "TaskDefinition" : {"Ref" : "ecsTask"}
       }
     },
     
-    "httpdServiceCpuAlarm" : {
+    "cpuHighAlarm" : {
       "Type" : "AWS::CloudWatch::Alarm",
       "Properties" : {
         "Namespace" : "AWS/ECS",
@@ -80,13 +90,124 @@
         "Threshold" : { "Ref" : "CPUHighThreshold" },
         "ComparisonOperator": "GreaterThanThreshold",
         "AlarmActions" : [
-          { "Ref" : "httpdServiceAlarmNotificationTopic" }
+          { "Ref" : "cpuHighAlarmNotificationTopic" }
         ]
       }
     },
     
-    "httpdServiceAlarmNotificationTopic" : {
-      "Type" : "AWS::SNS::Topic"
+    "cpuHighAlarmNotificationTopic" : {
+      "Type" : "AWS::SNS::Topic",
+      "Properties" : {
+        "Subscription" : [
+          {
+            "Protocol" : "lambda",
+            "Endpoint" : { "Fn::GetAtt" : ["ecsAutoScaleUpFunction", "Arn"] }
+          }
+        ]
+      }
+    },
+    
+    "lambdaSnsPermissionToCallEcsAutoScaleUpLambda": {
+        "Type": "AWS::Lambda::Permission",
+        "Properties": {
+            "FunctionName": {"Fn::GetAtt": ["ecsAutoScaleUpFunction", "Arn"]},
+            "Action": "lambda:InvokeFunction",
+            "Principal": "sns.amazonaws.com"
+        }
+    },
+    
+    "ecsAutoScaleFunctionRole" : {
+      "Type": "AWS::IAM::Role",
+        "Properties": {
+          "AssumeRolePolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Effect": "Allow",
+              "Principal": {"Service": ["lambda.amazonaws.com"]},
+              "Action": ["sts:AssumeRole"]
+            }]
+          },
+          "Path": "/",
+          "Policies": [{
+            "PolicyName": "root",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [{
+                "Effect": "Allow",
+                "Action": ["logs:CreateLogGroup","logs:CreateLogStream","logs:PutLogEvents"],
+                "Resource": "arn:aws:logs:*:*:*"
+              },
+              {
+                "Effect": "Allow",
+                "Action": ["ecs:DescribeServices", "ecs:UpdateService"],
+                "Resource": "*"
+              }
+              ]
+            }
+          }]
+        }
+    },
+    
+    "ecsAutoScaleUpFunction" : {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "ZipFile":  { "Fn::Join": ["", [
+            "console.log('Loading event');\n",
+            "var aws = require('aws-sdk');\n",
+
+            "exports.handler = function(event, context) {\n",
+            "  var ecsService = '",  { "Fn::GetAtt" : ["getECSServiceNameFromArnCustom", "Last"] }  ,"';\n",
+            "  var ecsCluster = '", { "Ref" : "ClusterName" } ,"';\n",
+            "  var ecsRegion = '", { "Ref" : "AWS::Region"} ,"';\n",
+            
+            "  var maxCount = ", {"Ref" : "MaxTasks"} ,";\n",
+            
+            "  ecsCluster = ecsCluster.trim();\n",
+            "  ecsRegion = ecsRegion.trim();\n",
+            "  ecsService = ecsService.trim();\n",
+            
+            "  console.log(ecsCluster);\n",
+            "  console.log(ecsService);\n",
+            "  console.log(ecsRegion);\n",
+
+            "  var ecs = new aws.ECS({region: ecsRegion});\n",
+            
+
+            "  ecs.describeServices({services: [ecsService], cluster: ecsCluster}, function(err, data) {\n",
+            "    if (err) {\n",
+            "      console.log(err, err.stack);\n",
+            "    } else {\n",
+            "      var desiredCount = data.services[0].desiredCount;\n",
+            "      if (desiredCount < maxCount) {\n",
+            "        desiredCount++;\n",
+            "        var params = {\n",
+            "          service:      ecsService,\n",
+            "          cluster:      ecsCluster,\n",
+            "          desiredCount: desiredCount\n",
+            "        };\n",
+            "        ecs.updateService(params, function(err, data) {\n",
+            "          if (err) {\n",
+            "            console.log(err, err.stack);\n",
+            "          } else {\n",
+            "            console.log(data);\n",
+            "            context.succeed();\n",
+            "          }\n",
+            "        });\n",
+            "      } else {\n",
+            "        console.log('Service count is already max.');\n",
+            "        context.fail();\n",
+            "      }\n",
+            "    }\n",
+            "  });\n",
+            "};\n"
+            ]]}
+          },
+          "Handler": "index.handler",
+          "Runtime": "nodejs",
+          "Timeout": "30",
+          "Role": { "Fn::GetAtt" : ["ecsAutoScaleFunctionRole", "Arn"] }
+        }
     },
     
     "getECSServiceNameFromArnFunctionRole" : {
@@ -155,7 +276,7 @@
       "Type": "Custom::ECSServiceNameFromArn",
       "Properties" : {
         "ServiceToken": { "Fn::GetAtt" : ["getECSServiceNameFromArnFunction", "Arn"] },
-        "StringToParse": { "Ref" : "httpdService" }
+        "StringToParse": { "Ref" : "ecsService" }
       }
     }
     
