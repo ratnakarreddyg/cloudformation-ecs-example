@@ -91,6 +91,22 @@
                 "Resource":"*"
               },
               {
+                "Effect":"Allow",
+                "Action": [
+                  "sqs:DeleteMessage",
+                  "sqs:ReceiveMessage"
+                ],
+                "Resource" : { "Fn::GetAtt" : ["AlarmQueue", "Arn"]}
+              },
+              {
+                "Effect" : "Allow",
+                "Action" : [
+                  "dynamodb:GetItem",
+                  "dynamodb:PutItem"
+                ],
+                "Resource" : "*"
+              },
+              {
                 "Effect":"Deny",
                 "Action":"iam:*",
                 "Resource":"*"
@@ -321,7 +337,7 @@
             "Memory": "128",
             "Environment" : [
               {
-                "Name": "SQS_QUEUE",
+                "Name": "SQS_QUEUE_URL",
                 "Value": { "Ref" : "AlarmQueue" }
               },
               {
