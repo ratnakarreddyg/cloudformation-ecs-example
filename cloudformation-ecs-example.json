@@ -307,6 +307,51 @@
       }
     },
     
+    "ECSScalingServiceTaskDef" : {
+      "Type": "AWS::ECS::TaskDefinition",
+      "Properties" : {
+        "ContainerDefinitions" : [
+          {
+            "Name" : { "Fn::Join" : ["", [
+              { "Ref" : "AWS::StackName" }, "-ecs-scaling"
+            ]]},
+          
+            "Image":"vinayselvaraj/ecs-task-scaling-service:latest",
+            "Cpu": "10",
+            "Memory": "128",
+            "Environment" : [
+              {
+                "Name": "SQS_QUEUE",
+                "Value": { "Ref" : "AlarmQueue" }
+              },
+              {
+                "Name": "DDB_TABLE",
+                "Value": { "Ref" : "ScalingConfigTable" }
+              },
+              {
+                "Name": "ECS_CLUSTER",
+                "Value": { "Ref" : "ECSCluster" }
+              },
+              {
+                "Name": "AWS_REGION",
+                "Value": { "Ref" : "AWS::Region" }
+              }
+            ],
+            "Essential": "true"
+          }
+        ]
+      }
+    },
+    
+    "ECSScalingServiceService" : {
+      "Type" : "AWS::ECS::Service",
+      "Properties" : {
+        "Cluster" : { "Ref" : "ECSCluster" },
+        "DesiredCount" : "1",
+        "TaskDefinition" : {"Ref" : "ECSScalingServiceTaskDef"}
+      }
+    },
+    
     "Elb8000" : {
       "Type" : "AWS::ElasticLoadBalancing::LoadBalancer",
       "Properties" : {
