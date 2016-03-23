@@ -3,29 +3,44 @@
   "Description" : "httpd ECS service",
   
   "Parameters" : {
-    "ClusterName" : {
-      "Description" : "ECS Cluster Name",
+    "ECSClusterStackName" : {
+      "Description" : "CloudFormation Stack Name that has the ECS cluster",
       "Type" : "String"
     },
     "CPUHighThreshold" : {
       "Description" : "Hich CPU Treshold in %",
-      "Type" : "String",
+      "Type" : "Number",
       "Default" : "80"
     },
     "CPULowThreshold" : {
       "Description" : "Low CPU Treshold in %",
-      "Type" : "String",
-      "Default" : "20"
+      "Type" : "Number",
+      "Default" : "10"
     },
     "MaxTasks" : {
       "Description" : "Maximum number of ECS Tasks for the service",
-      "Type" : "String",
+      "Type" : "Number",
       "Default" : "20"
     },
     "MinTasks" : {
       "Description" : "Minimum number of ECS Tasks for the service",
-      "Type" : "String",
-      "Default" : "4"
+      "Type" : "Number",
+      "Default" : "2"
+    },
+    "ScaleUpPercent" : {
+      "Description" : "Percent to scale up by",
+      "Type" : "Number",
+      "Default" : "20"
+    },
+    "ScaleDownPercent" : {
+      "Description" : "Percent to scale down by (USE NEGATIVE NUMBER)",
+      "Type" : "Number",
+      "Default" : "-10"
+    },
+    "ScalingCooldown" : {
+      "Description" : "Number of seconds after a scaling activity is completed before any further scaling event can start",
+      "Type" : "Number",
+      "Default" : "60"
     }
   },
   
@@ -67,7 +82,7 @@
     "ecsService" : {
       "Type" : "AWS::ECS::Service",
       "Properties" : {
-        "Cluster" : {"Ref" : "ClusterName" },
+        "Cluster" : { "Fn::GetAtt": [ "LookupStackOutputCustom", "ECSClusterName" ] },
         "DesiredCount" : "1",
         "TaskDefinition" : {"Ref" : "ecsTask"}
       }
@@ -77,17 +92,18 @@
       "Type" : "AWS::CloudWatch::Alarm",
       "Properties" : {
         "Namespace" : "AWS/ECS",
-        "AlarmDescription" : { "Fn::Join": ["", 
-          [
-            "stack=", {"Ref" : "AWS::StackName"},
-            ",minTasks=", {"Ref" : "MinTasks"},
-            ",maxTasks=", {"Ref" : "MaxTasks"}
-          ]]},
         "MetricName" : "CPUUtilization",
+        "AlarmDescription" : { "Fn::Join": ["", [
+          { "Fn::GetAtt" : ["GetECSServiceNameFromArnCustom", "ServiceName"] }, ",",
+          { "Ref" : "MinTasks" }, ",",
+          { "Ref" : "MaxTasks" }, ",",
+          { "Ref" : "ScalingCooldown" }, ",",
+          { "Ref" : "ScaleUpPercent" }
+        ]]},
         "Dimensions" : [
           {
             "Name" : "ClusterName",
-            "Value" : { "Ref" : "ClusterName" }
+            "Value" : { "Fn::GetAtt": [ "LookupStackOutputCustom", "ECSClusterName" ] }
           },
           {
             "Name" : "ServiceName",
@@ -101,124 +117,129 @@
         "Threshold" : { "Ref" : "CPUHighThreshold" },
         "ComparisonOperator": "GreaterThanThreshold",
         "AlarmActions" : [
-          { "Ref" : "cpuHighAlarmNotificationTopic" }
+          { "Fn::GetAtt": [ "LookupStackOutputCustom", "AlarmTopicArn" ] }
         ]
       }
     },
     
-    "cpuHighAlarmNotificationTopic" : {
-      "Type" : "AWS::SNS::Topic",
+    "cpuLowAlarm" : {
+      "Type" : "AWS::CloudWatch::Alarm",
       "Properties" : {
-        "Subscription" : [
+        "Namespace" : "AWS/ECS",
+        "MetricName" : "CPUUtilization",
+        "AlarmDescription" : { "Fn::Join": ["", [
+          { "Fn::GetAtt" : ["GetECSServiceNameFromArnCustom", "ServiceName"] }, ",",
+          { "Ref" : "MinTasks" }, ",",
+          { "Ref" : "MaxTasks" }, ",",
+          { "Ref" : "ScalingCooldown" }, ",",
+          { "Ref" : "ScaleDownPercent" }
+        ]]},
+        "Dimensions" : [
           {
-            "Protocol" : "lambda",
-            "Endpoint" : { "Fn::GetAtt" : ["ecsAutoScaleUpFunction", "Arn"] }
+            "Name" : "ClusterName",
+            "Value" : { "Fn::GetAtt": [ "LookupStackOutputCustom", "ECSClusterName" ] }
+          },
+          {
+            "Name" : "ServiceName",
+            "Value" : { "Fn::GetAtt" : ["GetECSServiceNameFromArnCustom", "ServiceName"] }
+            
           }
+        ],
+        "Statistic" : "Average",
+        "Period" : "60",
+        "EvaluationPeriods" : "3",
+        "Threshold" : { "Ref" : "CPULowThreshold" },
+        "ComparisonOperator": "LessThanThreshold",
+        "AlarmActions" : [
+          { "Fn::GetAtt": [ "LookupStackOutputCustom", "AlarmTopicArn" ] }
         ]
       }
     },
     
-    "lambdaSnsPermissionToCallEcsAutoScaleUpLambda": {
-        "Type": "AWS::Lambda::Permission",
-        "Properties": {
-            "FunctionName": {"Fn::GetAtt": ["ecsAutoScaleUpFunction", "Arn"]},
-            "Action": "lambda:InvokeFunction",
-            "Principal": "sns.amazonaws.com"
+    "LookupStackOutputCustom": {
+      "Type": "Custom::NetworkInfo",
+      "Properties": {
+        "ServiceToken": { "Fn::GetAtt" : ["LookupStackOutputs", "Arn"] },
+        "StackName": {
+          "Ref": "ECSClusterStackName"
         }
+      }
     },
     
-    "ecsAutoScaleFunctionRole" : {
+    "LookupStackOutputsLambdaExecutionRole": {
       "Type": "AWS::IAM::Role",
-        "Properties": {
-          "AssumeRolePolicyDocument": {
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Effect": "Allow",
+            "Principal": {"Service": ["lambda.amazonaws.com"]},
+            "Action": ["sts:AssumeRole"]
+          }]
+        },
+        "Path": "/",
+        "Policies": [{
+          "PolicyName": "root",
+          "PolicyDocument": {
             "Version": "2012-10-17",
             "Statement": [{
               "Effect": "Allow",
-              "Principal": {"Service": ["lambda.amazonaws.com"]},
-              "Action": ["sts:AssumeRole"]
+              "Action": ["logs:CreateLogGroup","logs:CreateLogStream","logs:PutLogEvents"],
+              "Resource": "arn:aws:logs:*:*:*"
+            },
+            {
+              "Effect": "Allow",
+              "Action": ["cloudformation:DescribeStacks"],
+              "Resource": "*"
             }]
-          },
-          "Path": "/",
-          "Policies": [{
-            "PolicyName": "root",
-            "PolicyDocument": {
-              "Version": "2012-10-17",
-              "Statement": [{
-                "Effect": "Allow",
-                "Action": ["logs:CreateLogGroup","logs:CreateLogStream","logs:PutLogEvents"],
-                "Resource": "arn:aws:logs:*:*:*"
-              },
-              {
-                "Effect": "Allow",
-                "Action": ["ecs:DescribeServices", "ecs:UpdateService"],
-                "Resource": "*"
-              }
-              ]
-            }
-          }]
-        }
+          }
+        }]
+      }
     },
     
-    "ecsAutoScaleUpFunction" : {
+    "LookupStackOutputs": {
       "Type": "AWS::Lambda::Function",
       "Properties": {
         "Code": {
-          "ZipFile":  { "Fn::Join": ["", [
-            "console.log('Loading event');\n",
-            "var aws = require('aws-sdk');\n",
-
-            "exports.handler = function(event, context) {\n",
-            "  var ecsService = '",  { "Fn::GetAtt" : ["GetECSServiceNameFromArnCustom", "ServiceName"] }  ,"';\n",
-            "  var ecsCluster = '", { "Ref" : "ClusterName" } ,"';\n",
-            "  var ecsRegion = '", { "Ref" : "AWS::Region"} ,"';\n",
-            
-            "  var maxCount = ", {"Ref" : "MaxTasks"} ,";\n",
-            
-            "  ecsCluster = ecsCluster.trim();\n",
-            "  ecsRegion = ecsRegion.trim();\n",
-            "  ecsService = ecsService.trim();\n",
-            
-            "  console.log(ecsCluster);\n",
-            "  console.log(ecsService);\n",
-            "  console.log(ecsRegion);\n",
-
-            "  var ecs = new aws.ECS({region: ecsRegion});\n",
-            
-
-            "  ecs.describeServices({services: [ecsService], cluster: ecsCluster}, function(err, data) {\n",
-            "    if (err) {\n",
-            "      console.log(err, err.stack);\n",
-            "    } else {\n",
-            "      var desiredCount = data.services[0].desiredCount;\n",
-            "      if (desiredCount < maxCount) {\n",
-            "        desiredCount++;\n",
-            "        var params = {\n",
-            "          service:      ecsService,\n",
-            "          cluster:      ecsCluster,\n",
-            "          desiredCount: desiredCount\n",
-            "        };\n",
-            "        ecs.updateService(params, function(err, data) {\n",
-            "          if (err) {\n",
-            "            console.log(err, err.stack);\n",
-            "          } else {\n",
-            "            console.log(data);\n",
-            "            context.succeed();\n",
-            "          }\n",
-            "        });\n",
-            "      } else {\n",
-            "        console.log('Service count is already max.');\n",
-            "        context.fail();\n",
-            "      }\n",
-            "    }\n",
-            "  });\n",
-            "};\n"
-            ]]}
-          },
-          "Handler": "index.handler",
-          "Runtime": "nodejs",
-          "Timeout": "30",
-          "Role": { "Fn::GetAtt" : ["ecsAutoScaleFunctionRole", "Arn"] }
-        }
+          "ZipFile":  { "Fn::Join": ["\n", [
+            "var response = require('cfn-response');",
+            "exports.handler = function(event, context) {",
+            "    console.log('REQUEST RECEIVED:\\n', JSON.stringify(event));",
+            "    if (event.RequestType == 'Delete') {",
+            "        response.send(event, context, response.SUCCESS);",
+            "        return;",
+            "    }",
+            "    var stackName = event.ResourceProperties.StackName;",
+            "    var responseData = {};",
+            "    if (stackName) {",
+            "        var aws = require('aws-sdk');",
+            "        var cfn = new aws.CloudFormation();",
+            "        cfn.describeStacks({StackName: stackName}, function(err, data) {",
+            "            if (err) {",
+            "                responseData = {Error: 'DescribeStacks call failed'};",
+            "                console.log(responseData.Error + ':\\n', err);",
+            "                response.send(event, context, response.FAILED, responseData);",
+            "            }",
+            "            else {",
+            "                data.Stacks[0].Outputs.forEach(function(output) {",
+            "                    responseData[output.OutputKey] = output.OutputValue;",
+            "                });",
+            "                response.send(event, context, response.SUCCESS, responseData);",
+            "            }",
+            "        });",
+            "    } else {",
+            "        responseData = {Error: 'Stack name not specified'};",
+            "        console.log(responseData.Error);",
+            "        response.send(event, context, response.FAILED, responseData);",
+            "    }",
+            "};"
+          ]]}
+        },
+        "Handler": "index.handler",
+        "Runtime": "nodejs",
+        "Timeout": "30",
+        "Role": { "Fn::GetAtt" : ["LookupStackOutputsLambdaExecutionRole", "Arn"] }
+      }
     },
     
     "GetECSServiceNameFromArnFunctionRole" : {
@@ -264,6 +285,7 @@
             "    if (stringToParse) {\n",
             "        var responseData = {};\n",
             "        responseData.Splits = stringToParse.split('/');\n",
+            "        responseData.Beginning = responseData.Splits.slice(0, responseData.Splits.length - 1).join('/');\n",
             "        responseData.ServiceName = responseData.Splits.slice(responseData.Splits.length - 1)[0];\n",
             "        console.log(responseData);\n",
             "        response.send(event, context, response.SUCCESS, responseData);\n",
@@ -290,15 +312,6 @@
       }
     }
     
-  },
-  
-  "Outputs" : {
-    "ECSServiceName" : {
-      "Description" : "Name of the ECS Service",
-      "Value" : { "Fn::GetAtt" : ["GetECSServiceNameFromArnCustom", "ServiceName"] }
-    }
   }
-  
-  
   
 }

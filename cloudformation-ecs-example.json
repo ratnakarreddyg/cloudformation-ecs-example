@@ -241,6 +241,72 @@
       }
     },
     
+    "AlarmTopic" : {
+      "Type" : "AWS::SNS::Topic",
+      "Properties" : {
+        "Subscription" : [
+          {
+            "Protocol" : "sqs",
+            "Endpoint" : { "Fn::GetAtt" : ["AlarmQueue", "Arn"] }
+          }
+        ]
+      }
+    },
+    
+    "AlarmQueue" : {
+      "Type" : "AWS::SQS::Queue",
+      "Properties" : {
+        "VisibilityTimeout" : "60"
+      }
+    },
+    
+    "AlarmQueuePolicy" : {
+      "Type":"AWS::SQS::QueuePolicy",
+      "Properties" : {
+        "PolicyDocument" : {
+          "Version" : "2012-10-17",
+          "Id" : "MyQueuePolicy",
+          "Statement" : [
+            {
+              "Sid" : "Allow-SendMessage-To-Queue-From-SNS-Topic",
+    	        "Effect" : "Allow",           
+    	        "Principal" : "*",
+     	        "Action" : ["sqs:SendMessage"],
+    	        "Resource" : "*",
+              "Condition" : {
+                "ArnEquals" : {
+                  "aws:SourceArn" : {"Ref":"AlarmTopic"}
+                }
+              }
+            }
+          ]
+        },
+        "Queues":[{"Ref":"AlarmQueue"}]
+      }
+    },
+    
+    "ScalingConfigTable" : {
+      "Type" : "AWS::DynamoDB::Table",
+      "Properties" : {
+        "ProvisionedThroughput" : {
+          "ReadCapacityUnits"  : "1",
+          "WriteCapacityUnits" : "1"
+        },
+        "AttributeDefinitions" : [
+          {
+            "AttributeName" : "AlarmId",
+            "AttributeType" : "S"
+          }
+        ],
+        "KeySchema" : [
+          {
+            "AttributeName" : "AlarmId",
+            "KeyType" : "HASH"
+          }
+        ]
+      }
+    },
+    
     "Elb8000" : {
       "Type" : "AWS::ElasticLoadBalancing::LoadBalancer",
       "Properties" : {
@@ -275,6 +341,17 @@
       "Type" : "AWS::ECS::Cluster"
     }
     
+  },
+  
+  "Outputs" : {
+    "AlarmTopicArn" : {
+      "Description" : "SNS Topic for CloudWatch alarms",
+      "Value" : { "Ref" : "AlarmTopic" }
+    },
+    "ECSClusterName" : {
+      "Description" : "ECS Cluster Name",
+      "Value" : { "Ref" : "ECSCluster" }
+    }
   }
   
 }
