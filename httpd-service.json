@@ -25,7 +25,7 @@
     "MinTasks" : {
       "Description" : "Minimum number of ECS Tasks for the service",
       "Type" : "String",
-      "Default" : "2"
+      "Default" : "4"
     }
   },
   
@@ -77,7 +77,12 @@
       "Type" : "AWS::CloudWatch::Alarm",
       "Properties" : {
         "Namespace" : "AWS/ECS",
-        "AlarmDescription" : { "Fn::Join": ["", [ {"Ref" : "AWS::StackName"} ] ] },
+        "AlarmDescription" : { "Fn::Join": ["", 
+          [
+            "stack=", {"Ref" : "AWS::StackName"},
+            ",minTasks=", {"Ref" : "MinTasks"},
+            ",maxTasks=", {"Ref" : "MaxTasks"}
+          ]]},
         "MetricName" : "CPUUtilization",
         "Dimensions" : [
           {
