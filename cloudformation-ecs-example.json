@@ -29,6 +29,17 @@
       "Type" : "String",
       "Default" : "t2.micro",
       "AllowedValues" : ["t2.micro", "t2.small", "t2.medium", "t2.large"]
+    },
+    
+    "MemoryReservationHigh" : {
+      "Description" : "High Memory Treshold in %",
+      "Type" : "Number",
+      "Default" : "80"
+    },
+    "MemoryReservationLow" : {
+      "Description" : "Low Memory Treshold in %",
+      "Type" : "Number",
+      "Default" : "20"
     }
     
   },
@@ -253,6 +264,72 @@
         "LoadBalancerNames" : [ { "Ref" : "Elb8000" } ],
         "Tags" : [
           { "Key" : "Name", "Value" : { "Ref" : "AWS::StackName" }, "PropagateAtLaunch" : "true" }
+        ]
+      }
+    },
+    
+    "ClusterScaleUpPolicy" : {
+       "Type" : "AWS::AutoScaling::ScalingPolicy",
+       "Properties" : {
+          "AdjustmentType" : "ChangeInCapacity",
+          "AutoScalingGroupName" : { "Ref" : "AutoScalingGroup" },
+          "Cooldown" : "1",
+          "ScalingAdjustment" : "1"
+       }
+    },
+    
+    "ClusterScaleDownPolicy" : {
+       "Type" : "AWS::AutoScaling::ScalingPolicy",
+       "Properties" : {
+          "AdjustmentType" : "ChangeInCapacity",
+          "AutoScalingGroupName" : { "Ref" : "AutoScalingGroup" },
+          "Cooldown" : "1",
+          "ScalingAdjustment" : "-1"
+       }
+    },
+    
+    "ClusterMemoryReservationHigh" : {
+      "Type" : "AWS::CloudWatch::Alarm",
+      "Properties" : {
+        "Namespace" : "AWS/ECS",
+        "MetricName" : "MemoryReservation",
+        "AlarmDescription" : "Cluster MemoryReservation is High",
+        "Dimensions" : [
+          {
+            "Name" : "ClusterName",
+            "Value" :  { "Ref" : "ECSCluster" }
+          }
+        ],
+        "Statistic" : "Average",
+        "Period" : "60",
+        "EvaluationPeriods" : "3",
+        "Threshold" : { "Ref" : "MemoryReservationHigh" },
+        "ComparisonOperator": "GreaterThanThreshold",
+        "AlarmActions" : [
+          { "Ref" : "ClusterScaleUpPolicy" }
+        ]
+      }
+    },
+    
+    "ClusterMemoryReservationLow" : {
+      "Type" : "AWS::CloudWatch::Alarm",
+      "Properties" : {
+        "Namespace" : "AWS/ECS",
+        "MetricName" : "MemoryReservation",
+        "AlarmDescription" : "Cluster MemoryReservation is Low",
+        "Dimensions" : [
+          {
+            "Name" : "ClusterName",
+            "Value" :  { "Ref" : "ECSCluster" }
+          }
+        ],
+        "Statistic" : "Average",
+        "Period" : "60",
+        "EvaluationPeriods" : "3",
+        "Threshold" : { "Ref" : "MemoryReservationLow" },
+        "ComparisonOperator": "LessThanThreshold",
+        "AlarmActions" : [
+          { "Ref" : "ClusterScaleDownPolicy" }
         ]
       }
     },
